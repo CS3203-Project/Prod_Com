@@ -63,28 +63,25 @@ export class MessagingService {
    */
   async getConversationsWithLastMessage(userId: string, page = 1, limit = 10): Promise<ConversationWithLastMessageDto[]> {
     const conversations = await this.conversationService.getConversationsForUser(userId, page, limit);
-    const conversationsWithLastMessage: ConversationWithLastMessageDto[] = [];
+    const conversationIds = conversations.map((conversation) => conversation.id);
+    const { lastMessagesByConversationId, unreadCountsByConversationId } =
+      await this.messageService.getConversationMetadata(conversationIds, userId);
 
-    for (const conversation of conversations) {
-      // Get last message
-      const lastMessage = await this.messageService.getLastMessage(conversation.id);
+    return conversations
+      .map((conversation) => {
+        const lastMessage = lastMessagesByConversationId.get(conversation.id);
 
-      // Get unread count
-      const unreadCount = await this.messageService.getUnreadMessageCountForConversation(
-        conversation.id, 
-        userId
-      );
-
-      const conversationDto: ConversationWithLastMessageDto = {
-        ...this.conversationService.mapConversationToDto(conversation),
-        lastMessage: lastMessage || undefined,
-        unreadCount
-      };
-
-      conversationsWithLastMessage.push(conversationDto);
-    }
-
-    return conversationsWithLastMessage;
+        return {
+          ...this.conversationService.mapConversationToDto(conversation),
+          lastMessage,
+          unreadCount: unreadCountsByConversationId.get(conversation.id) ?? 0,
+        };
+      })
+      .sort((left, right) => {
+        const leftTime = left.lastMessage ? new Date(left.lastMessage.createdAt).getTime() : 0;
+        const rightTime = right.lastMessage ? new Date(right.lastMessage.createdAt).getTime() : 0;
+        return rightTime - leftTime;
+      });
   }
 
   /**

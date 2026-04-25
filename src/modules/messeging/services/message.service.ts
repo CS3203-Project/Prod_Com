@@ -12,6 +12,11 @@ import {
   PaginatedMessagesDto
 } from '../dto';
 
+interface ConversationMetadata {
+  lastMessagesByConversationId: Map<string, MessageResponseDto>;
+  unreadCountsByConversationId: Map<string, number>;
+}
+
 @Injectable()
 export class MessageService {
   constructor(
@@ -106,6 +111,48 @@ export class MessageService {
       .getOne();
 
     return lastMessage ? this.mapMessageToDto(lastMessage) : null;
+  }
+
+  /**
+   * Get last message and unread counts for a set of conversations in batch
+   */
+  async getConversationMetadata(
+    conversationIds: string[],
+    userId: string
+  ): Promise<ConversationMetadata> {
+    if (conversationIds.length === 0) {
+      return {
+        lastMessagesByConversationId: new Map(),
+        unreadCountsByConversationId: new Map(),
+      };
+    }
+
+    const lastMessages = await this.messageRepository
+      .createQueryBuilder('message')
+      .distinctOn(['message.conversationId'])
+      .where('message.conversationId IN (:...conversationIds)', { conversationIds })
+      .orderBy('message.conversationId', 'ASC')
+      .addOrderBy('message.createdAt', 'DESC')
+      .getMany();
+
+    const unreadRows = await this.messageRepository
+      .createQueryBuilder('message')
+      .select('message.conversationId', 'conversationId')
+      .addSelect('COUNT(*)', 'count')
+      .where('message.conversationId IN (:...conversationIds)', { conversationIds })
+      .andWhere('message.toId = :userId', { userId })
+      .andWhere('message.receivedAt IS NULL')
+      .groupBy('message.conversationId')
+      .getRawMany<{ conversationId: string; count: string }>();
+
+    return {
+      lastMessagesByConversationId: new Map(
+        lastMessages.map((message) => [message.conversationId, this.mapMessageToDto(message)])
+      ),
+      unreadCountsByConversationId: new Map(
+        unreadRows.map((row) => [row.conversationId, Number(row.count)])
+      ),
+    };
   }
 
   /**
