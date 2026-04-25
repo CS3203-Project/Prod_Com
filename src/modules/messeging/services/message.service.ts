@@ -38,63 +38,29 @@ export class MessageService {
 
     const savedMessage = await this.messageRepository.save(message);
     
-    // SMART EMAIL NOTIFICATION: Check if message is read after 5 seconds
+    // Queue email notification for unread message
+    // Email will be sent asynchronously with retry logic
     try {
-      // Check if we have real user data for email notifications
       if (senderEmail && recipientEmail && senderName && recipientName) {
-        console.log(`📧 Message sent - Starting 5 second timer to check if read`);
-        console.log(`🕐 Will check if message ${savedMessage.id} is read by ${recipientName} (${toId}) in 5 seconds`);
-        
-        // Schedule email notification check after 5 seconds
-        setTimeout(async () => {
-          try {
-            // Re-fetch the message to check if it has been read
-            const updatedMessage = await this.messageRepository.findOne({
-              where: { id: savedMessage.id }
-            });
-            
-            if (!updatedMessage) {
-              console.log(`❌ Message ${savedMessage.id} not found during email check`);
-              return;
-            }
-            
-            // Check if message has been read (receivedAt is not null)
-            if (updatedMessage.receivedAt) {
-              console.log(`✅ Message ${savedMessage.id} was READ by ${recipientName} - Skipping email notification`);
-              console.log(`📖 Message was read at: ${updatedMessage.receivedAt.toISOString()}`);
-            } else {
-              console.log(`📧 Message ${savedMessage.id} is still UNREAD after 5 seconds - Sending email notification`);
-              
-              await this.queueService.sendMessageNotification({
-                senderEmail: senderEmail,
-                recipientEmail: recipientEmail,
-                senderName: senderName,
-                recipientName: recipientName,
-                conversationId: conversationId,
-                messageContent: content.length > 100 ? content.substring(0, 100) + '...' : content
-              });
-              
-              console.log(`✅ Email notification queued for unread message to ${recipientEmail}`);
-            }
-          } catch (delayedEmailError) {
-            console.error('❌ Error during delayed email notification check:', delayedEmailError);
-          }
-        }, 5000); // 5 seconds delay
-        
-        console.log(`⏰ Email notification check scheduled for 5 seconds from now`);
-      } else {
-        console.log('📧 Message email notification skipped - missing user data');
-        console.log('📝 Missing fields:', {
-          senderEmail: !senderEmail ? 'missing' : 'provided',
-          recipientEmail: !recipientEmail ? 'missing' : 'provided', 
-          senderName: !senderName ? 'missing' : 'provided',
-          recipientName: !recipientName ? 'missing' : 'provided'
+        // Queue the email notification - it will be sent immediately
+        // The system handles retry logic and delivery status tracking
+        this.queueService.sendMessageNotification({
+          senderEmail: senderEmail,
+          recipientEmail: recipientEmail,
+          senderName: senderName,
+          recipientName: recipientName,
+          conversationId: conversationId,
+          messageContent: createMessageDto.content.length > 100 
+            ? createMessageDto.content.substring(0, 100) + '...' 
+            : createMessageDto.content
+        }).catch(error => {
+          // Log but don't fail message sending if email queue fails
+          console.warn('Failed to queue email notification:', error);
         });
-        console.log('💡 To enable email notifications, include senderName, senderEmail, recipientName, recipientEmail in the request');
       }
     } catch (emailError) {
-      console.error('❌ Failed to process email notification:', emailError);
-      // Don't fail the message sending if email notification fails
+      // Don't fail message sending if email processing fails
+      console.warn('Email notification error:', emailError);
     }
 
     return this.mapMessageToDto(savedMessage);

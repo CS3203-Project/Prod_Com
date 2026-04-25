@@ -119,22 +119,9 @@ export class MessagingGateway implements OnGatewayConnection, OnGatewayDisconnec
       };
 
       this.logger.log(`Received message from ${createMessageDto.fromId} to ${createMessageDto.toId}`);
-      console.log('--- [WS] message:send called ---');
-      console.log('Payload:', createMessageDto);
-      console.log('Connected users:', Array.from(this.connectedUsers.entries()));
-      console.log('Active conversations:', Array.from(this.activeConversations.entries()));
-      
-      // Check if user data is provided for email notifications
-      if (createMessageDto.senderEmail && createMessageDto.recipientEmail) {
-        console.log('📧 User data provided with WebSocket message - email notifications enabled');
-      } else {
-        console.log('📧 No user data provided with WebSocket message - email notifications will be skipped');
-        console.log('💡 To enable email notifications, include senderName, senderEmail, recipientName, recipientEmail in the WebSocket payload');
-      }
       
       // Save message to database using existing service
       const savedMessage = await this.messagingService.sendMessage(createMessageDto);
-      console.log('Message saved to DB:', savedMessage);
       
       // Emit to sender (confirmation)
       client.emit('message:sent', savedMessage);
@@ -142,16 +129,13 @@ export class MessagingGateway implements OnGatewayConnection, OnGatewayDisconnec
       // Emit to recipient if they're online
       const recipientSocketId = this.connectedUsers.get(createMessageDto.toId);
       if (recipientSocketId) {
-        console.log(`Recipient ${createMessageDto.toId} is online, socket: ${recipientSocketId}`);
         this.server.to(recipientSocketId).emit('message:received', savedMessage);
         this.logger.log(`Message delivered to recipient ${createMessageDto.toId}`);
         
         // Auto-mark as read if recipient is actively viewing this conversation
         const recipientActiveConversation = this.activeConversations.get(createMessageDto.toId);
-        console.log('Recipient active conversation:', recipientActiveConversation);
         if (recipientActiveConversation === savedMessage.conversationId) {
           try {
-            console.log('Recipient is actively viewing this conversation, auto-marking as read...');
             await this.messagingService.markMessageAsRead(savedMessage.id, createMessageDto.toId);
             this.logger.log(`Auto-marked message ${savedMessage.id} as read for actively viewing user ${createMessageDto.toId}`);
             
@@ -167,23 +151,17 @@ export class MessagingGateway implements OnGatewayConnection, OnGatewayDisconnec
               messageId: savedMessage.id,
               conversationId: savedMessage.conversationId
             });
-            console.log('Auto-read events emitted');
           } catch (error) {
             this.logger.error(`Error auto-marking message as read: ${error.message}`);
-            console.error('Error auto-marking as read:', error);
           }
-        } else {
-          console.log('Recipient is NOT actively viewing this conversation, not auto-marking as read.');
         }
       } else {
         this.logger.log(`Recipient ${createMessageDto.toId} is offline`);
-        console.log(`Recipient ${createMessageDto.toId} is offline`);
       }
       
       return { success: true, message: savedMessage };
     } catch (error) {
       this.logger.error(`Error sending message: ${error.message}`);
-      console.error('Error in handleSendMessage:', error);
       client.emit('message:error', { error: error.message });
       return { success: false, error: error.message };
     }
