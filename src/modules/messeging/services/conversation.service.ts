@@ -99,7 +99,10 @@ export class ConversationService {
     return await this.conversationRepository
       .createQueryBuilder('conversation')
       .where(':userId = ANY(conversation.userIds)', { userId })
-      .orderBy('conversation.id', 'DESC')
+      .leftJoin('conversation.messages', 'message')
+      .addSelect('MAX(message.createdAt)', 'lastMessageAt')
+      .groupBy('conversation.id')
+      .orderBy('lastMessageAt', 'DESC', 'NULLS LAST')
       .skip(skip)
       .take(limit)
       .getMany();
@@ -194,7 +197,8 @@ export class ConversationService {
     return {
       id: conversation.id,
       userIds: conversation.userIds,
-      title: conversation.title
+      title: conversation.title,
+      serviceId: conversation.serviceId,
     };
   }
 }

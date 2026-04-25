@@ -7,9 +7,10 @@ import {
   Body, 
   Param, 
   Query, 
-  UseGuards,
   HttpCode,
-  HttpStatus
+  HttpStatus,
+  Headers,
+  BadRequestException
 } from '@nestjs/common';
 import { MessagingService } from './services/messaging.service';
 import {
@@ -17,7 +18,7 @@ import {
   CreateMessageDto,
   GetConversationsDto,
   GetMessagesDto,
-  MarkMessageReadDto,
+  PaginationQueryDto,
   ConversationResponseDto,
   MessageResponseDto,
   PaginatedConversationsDto,
@@ -28,6 +29,14 @@ import {
 @Controller('messaging')
 export class MessagingController {
   constructor(private readonly messagingService: MessagingService) {}
+
+  private getActorId(actorHeader?: string, actorQuery?: string): string {
+    const actorId = actorHeader || actorQuery;
+    if (!actorId) {
+      throw new BadRequestException('actor user id is required');
+    }
+    return actorId;
+  }
 
   /**
    * Create a new conversation
@@ -55,13 +64,15 @@ export class MessagingController {
   @Get('conversations/enhanced')
   async getConversationsWithLastMessage(
     @Query('userId') userId: string,
-    @Query('page') page?: number,
-    @Query('limit') limit?: number
+    @Query() pagination: PaginationQueryDto,
   ): Promise<ConversationWithLastMessageDto[]> {
+    if (!userId) {
+      throw new BadRequestException('userId is required');
+    }
     return await this.messagingService.getConversationsWithLastMessage(
       userId, 
-      page || 1, 
-      limit || 10
+      pagination.page || 1, 
+      pagination.limit || 10
     );
   }
 
@@ -93,9 +104,10 @@ export class MessagingController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteConversation(
     @Param('id') conversationId: string,
-    @Query('userId') userId: string
+    @Query('userId') userId: string,
+    @Headers('x-user-id') actorHeader?: string
   ): Promise<void> {
-    await this.messagingService.deleteConversation(conversationId, userId);
+    await this.messagingService.deleteConversation(conversationId, this.getActorId(actorHeader, userId));
   }
 
   /**
@@ -105,9 +117,10 @@ export class MessagingController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async markConversationAsRead(
     @Param('id') conversationId: string,
-    @Query('userId') userId: string
+    @Query('userId') userId: string,
+    @Headers('x-user-id') actorHeader?: string
   ): Promise<void> {
-    await this.messagingService.markConversationAsRead(conversationId, userId);
+    await this.messagingService.markConversationAsRead(conversationId, this.getActorId(actorHeader, userId));
   }
 
   /**
@@ -137,14 +150,13 @@ export class MessagingController {
   async getMessagesBetweenUsers(
     @Param('userOne') userOne: string,
     @Param('userTwo') userTwo: string,
-    @Query('page') page?: number,
-    @Query('limit') limit?: number
+    @Query() pagination: PaginationQueryDto
   ): Promise<PaginatedMessagesDto> {
     return await this.messagingService.getMessagesBetweenUsers(
       userOne, 
       userTwo, 
-      page || 1, 
-      limit || 50
+      pagination.page || 1, 
+      pagination.limit || 50
     );
   }
 
@@ -164,9 +176,10 @@ export class MessagingController {
   @Patch('messages/:id/mark-read')
   async markMessageAsRead(
     @Param('id') messageId: string,
-    @Query('userId') userId: string
+    @Query('userId') userId: string,
+    @Headers('x-user-id') actorHeader?: string
   ): Promise<MessageResponseDto> {
-    return await this.messagingService.markMessageAsRead(messageId, userId);
+    return await this.messagingService.markMessageAsRead(messageId, this.getActorId(actorHeader, userId));
   }
 
   /**
@@ -176,9 +189,10 @@ export class MessagingController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteMessage(
     @Param('id') messageId: string,
-    @Query('userId') userId: string
+    @Query('userId') userId: string,
+    @Headers('x-user-id') actorHeader?: string
   ): Promise<void> {
-    await this.messagingService.deleteMessage(messageId, userId);
+    await this.messagingService.deleteMessage(messageId, this.getActorId(actorHeader, userId));
   }
 
   /**
@@ -186,9 +200,10 @@ export class MessagingController {
    */
   @Get('users/:userId/unread-count')
   async getUnreadMessageCount(
-    @Param('userId') userId: string
+    @Param('userId') userId: string,
+    @Headers('x-user-id') actorHeader?: string
   ): Promise<{ count: number }> {
-    const count = await this.messagingService.getUnreadMessageCount(userId);
+    const count = await this.messagingService.getUnreadMessageCount(this.getActorId(actorHeader, userId));
     return { count };
   }
 }

@@ -1,4 +1,4 @@
-import { IsOptional, IsUUID, IsString, IsInt, Min, Matches, IsIn } from 'class-validator';
+import { IsOptional, IsUUID, IsString, IsInt, Min, Matches, IsIn, Max } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class GetConversationsDto {
@@ -17,6 +17,7 @@ export class GetConversationsDto {
   @Transform(({ value }) => parseInt(value))
   @IsInt()
   @Min(1)
+  @Max(100)
   limit?: number = 10;
 }
 
@@ -34,6 +35,7 @@ export class GetMessagesDto {
   @Transform(({ value }) => parseInt(value))
   @IsInt()
   @Min(1)
+  @Max(100)
   limit?: number = 20;
 
   @IsOptional()
@@ -45,4 +47,19 @@ export class GetMessagesDto {
 export class MarkMessageReadDto {
   @IsUUID()
   messageId: string;
+}
+
+export class PaginationQueryDto {
+  @IsOptional()
+  @Transform(({ value }) => parseInt(value))
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @IsOptional()
+  @Transform(({ value }) => parseInt(value))
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 10;
 }
